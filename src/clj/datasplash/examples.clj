@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log]
             [datasplash
              [api :as ds]
+             [avro :as avro]
              [bq :as bq]
              [datastore :as dts]
              [pubsub :as ps]
@@ -51,6 +52,32 @@
          (count-words)
          (ds/map format-count {:name :format-count})
          (ds/write-text-file output {:num-shards numShards}))))
+
+
+;;;;;;;;;;;;;;;
+;; Avro file ;;
+;;;;;;;;;;;;;;;
+
+(defoptions WriteAvroFileOptions
+  {:output {:default "dummy-out.avro"
+            :type String}})
+
+(def user-avro-schema
+  {:type "record"
+   :name "User"
+   :fields [{:name "name"            :type "string"}
+            {:name "favorite_number" :type ["int" "null"]}
+            {:name "favorite_color"  :type ["string" "null"]}]})
+
+
+(defn run-write-avro-file
+  [str-args]
+  (let [p (ds/make-pipeline WriteAvroFileOptions str-args)
+        {:keys [output]} (ds/get-pipeline-options p)]
+    (->> p
+         (ds/read-json-file "./_input/input.jsons" {:key-fn (fn mykeyfn [s] (keyword (str/replace s \_ \-)))})
+         (avro/write-avro-file "./_ouput/users.avro" {:schema user-avro-schema }))))
+
 
 ;;;;;;;;;;;
 ;; DeDup ;;
@@ -344,6 +371,7 @@
             (= job "standard-sql") (run-standard-sql-query args)
             (= job "datastore-word-count") (run-datastore-word-count args)
             (= job "pub-sub") (run-pub-sub args)
+            (= job "write-avro-file") (run-write-avro-file args)
             (re-find #"help" job)
             (do
               (doseq [klass [WordCountOptions]]
